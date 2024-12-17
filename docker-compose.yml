@@ -1,6 +1,8 @@
-# To connect to mysql database
-# Execute the following
+# To connect to mysql database execute the following
 # docker exec -it test sh -c "mysql -uroot -p$MYSQL_ROOT_PASSWORD"
+#
+# To setup the database, execute the following instead
+# docker exec -it test sh -c "mysql -uroot -p$MYSQL_ROOT_PASSWORD" < setup.sql
 
 name: "myblog"
 services:
