@@ -1,17 +1,32 @@
+import os
+from urllib.parse import quote_plus
 from datetime import datetime, timezone
+from dataclasses import dataclass
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
-from pydantic import BaseModel
+# from pydantic import BaseModel
+from sqlmodel import Field, SQLModel, create_engine, Session, select
+
+load_dotenv()
 
 app = FastAPI()
-articles = []
+MYSQL_USER = os.getenv("MYSQL_USER")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
+MYSQL_DATABASE = os.getenv("MYSQL_DATABASE")
 
-class Article(BaseModel):
-    id: int | None = 0
+CONNECTION_STRING = f"mysql+mysqlconnector://{MYSQL_USER}:{quote_plus(MYSQL_PASSWORD)}@localhost/{MYSQL_DATABASE}"
+myblog_db = create_engine(CONNECTION_STRING)
+
+
+@dataclass
+class Article(SQLModel, table=True):
+    __tablename__="articles"
+    id: int | None = Field(default=None, primary_key=True)
     author: str
     title: str
-    body: str
-    created_at: datetime | None = datetime.now(timezone.utc)
+    body: str | None = Field(default=None)
+    created_at: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @app.get("/")
@@ -28,16 +43,24 @@ def add(a: int, b: int):
     
 @app.post("/articles/")
 def create_article(article: Article):
-    article.id = recompute_id()
-    articles.append(article)
+    # Create a session with the database
+    # Add the article to the session: article in memory but not in the DB
+    # Commit the session: The article is in the DB
+    # Refresh session
+    session = Session(myblog_db)
+    session.add(article)
+    session.commit()
+    session.refresh(article)
     print("New article: ", article.id)
     return article
 
-def recompute_id():
-    return get_max_id() + 1
-
-def get_max_id():
-    if len(articles) == 0:
-        return 0
-    return [article.id for article in articles].sort()[-1]
+@app.get("/articles", response_model=list[Article])
+def list_articles():
+    with Session(myblog_db) as session:
+        # select * from articles ==> Class Article
+        statement = select(Article)
+        print(statement)
+        articles = session.exec(statement).all()
+        return articles
+        
     
