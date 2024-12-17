@@ -1,19 +1,36 @@
+import os
 from datetime import datetime, timezone
+from urllib.parse import quote_plus
+from dataclasses import dataclass
 
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
-from pydantic import BaseModel
+from sqlmodel import Field, SQLModel, create_engine, Session, select, update, delete
 
+# Load dotenv module
+load_dotenv()
+
+# Declare global vatiable
 app = FastAPI()
-articles = []
+MYSQL_USER = os.getenv("MYSQL_USER")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
+MYSQL_DATABASE = os.getenv("MYSQL_DATABASE")
+CONNECTION_STRING = f"mysql+mysqlconnector://{MYSQL_USER}:{quote_plus(MYSQL_PASSWORD)}@localhost/{MYSQL_DATABASE}"
+myblog_db = create_engine(CONNECTION_STRING)
 
-class Article(BaseModel):
-    id: int | None = 0
+
+# Article class
+@dataclass
+class Article(SQLModel, table =True):
+    __tablename__="articles"
+    id: int | None = Field(default=None, primary_key=True)
     author: str
     title: str
-    body: str
-    created_at: datetime | None = datetime.now(timezone.utc)
+    body: str | None = Field(default=None)
+    created_at: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-
+# API Operations
 @app.get("/")
 def root():
     return {
@@ -28,16 +45,22 @@ def add(a: int, b: int):
     
 @app.post("/articles/")
 def create_article(article: Article):
-    article.id = recompute_id()
-    articles.append(article)
+    # Create a session to the DB
+    session = Session(myblog_db)
+    # then add the article
+    session.add(article)
+    # Commit the session
+    session.commit()
+    # Refresh Session
+    session.refresh(article)
+
     print("New article: ", article.id)
     return article
 
-def recompute_id():
-    return get_max_id() + 1
-
-def get_max_id():
-    if len(articles) == 0:
-        return 0
-    return [article.id for article in articles].sort()[-1]
+@app.get("/articles", response_model=list[Article])
+def list_articles():
+    with Session(myblog_db) as session:
+        statement = select(Article)
+        print(statement)
+        return session.exec(statement)
     
