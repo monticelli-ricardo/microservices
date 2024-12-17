@@ -47,7 +47,16 @@ def add(a: int, b: int):
         "result": a + b
     }
     
-@app.post("/articles/")
+@app.post("/articles/",
+          description="""
+Create a new article
+
+Args:
+- article (Article): Required fields are `author` and `title`
+
+Returns:
+- Article: The created article
+          """)
 def create_article(article: Article):
     # Create a session with the database
     # Add the article to the session: article in memory but not in the DB
