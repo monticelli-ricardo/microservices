@@ -1,11 +1,14 @@
 # To setup the database, execute the following instead
 # docker exec -i myblog-db sh -c 'mysql -uroot -p$MYSQL_ROOT_PASSWORD' < setup.sql
 #
+# To test setup, execute
+# docker exec -i myblog-db sh -c 'mysql -uroot -p$MYSQL_ROOT_PASSWORD -e "SHOW TABLES;" $MYSQL_DATABASE'
+# 
 # To connect to mysql database execute the following
 # docker exec -it myblog-db sh -c 'mysql -uroot -p$MYSQL_ROOT_PASSWORD'
 #
 # mysql> show databases;
-# mysql> user myblog;
+# mysql> use myblog;
 # mysql> show tables;
 # mysql> select * from users;
 
