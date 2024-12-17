@@ -1,0 +1,14 @@
+name: "myblog"
+services:
+  db:
+    image: mysql:latest
+    container_name: test
+    environment:
+      - MYSQL_ROOT_PASSWORD=R@ndomPassword
+      - MYSQL_DATABASE=sample_database
+      - MYSQL_USER=sample_database
+      - MYSQL_PASSWORD=2ndR@ndomPassword
+    volumes:
+      - ./dbdata:/var/lib/mysql
+    ports:
+      - "3306:3306"
