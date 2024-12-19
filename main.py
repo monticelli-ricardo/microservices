@@ -14,8 +14,9 @@ app = FastAPI()
 MYSQL_USER = os.getenv("MYSQL_USER")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
 MYSQL_DATABASE = os.getenv("MYSQL_DATABASE")
+MYSQL_PORT = os.getenv("MYSQL_PORT")
 
-CONNECTION_STRING = f"mysql+mysqlconnector://{MYSQL_USER}:{quote_plus(MYSQL_PASSWORD)}@localhost/{MYSQL_DATABASE}"
+CONNECTION_STRING = f"mysql+mysqlconnector://{MYSQL_USER}:{quote_plus(MYSQL_PASSWORD)}@localhost:{MYSQL_PORT}/{MYSQL_DATABASE}"
 myblog_db = create_engine(CONNECTION_STRING)
 
 
@@ -57,17 +58,18 @@ Args:
 Returns:
 - Article: The created article
           """)
-def create_article(article: Article):
+def create_article(article: ArticleUpdate):
     # Create a session with the database
     # Add the article to the session: article in memory but not in the DB
     # Commit the session: The article is in the DB
     # Refresh session
     session = Session(myblog_db)
-    session.add(article)
+    db_article = Article.model_validate(article)
+    session.add(db_article)
     session.commit()
-    session.refresh(article)
-    print("New article: ", article.id)
-    return article
+    session.refresh(db_article)
+    print("New article: ", db_article.id)
+    return db_article
 
 @app.get("/articles", response_model=list[Article])
 def list_articles():
