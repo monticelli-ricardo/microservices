@@ -1,13 +1,14 @@
 from enum import Enum
 import os
-from re import S
+from typing import Annotated
 from urllib.parse import quote_plus
 from datetime import datetime, timezone
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
 # from pydantic import BaseModel
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlmodel import Field, SQLModel, create_engine, Session, select
 
 load_dotenv()
@@ -19,6 +20,8 @@ MYSQL_DATABASE = os.getenv("MYSQL_DATABASE")
 MYSQL_PORT = os.getenv("MYSQL_PORT")
 
 # SECRET_TOKEN = os.getenv("SECRET_TOKEN")
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 CONNECTION_STRING = f"mysql+mysqlconnector://{MYSQL_USER}:{quote_plus(MYSQL_PASSWORD)}@localhost:{MYSQL_PORT}/{MYSQL_DATABASE}"
 myblog_db = create_engine(CONNECTION_STRING)
@@ -49,7 +52,6 @@ class Article(SQLModel, table=True):
 
 
 class ArticleUpdate(SQLModel):
-    author: str | None = None
     title: str | None = None
     body: str | None = None
 
@@ -92,6 +94,7 @@ def create_article(article: ArticleUpdate, user_id: int, token: str=""):
         author=get_user(user_id).username,
         **data_article
     )   
+    # Add the article to the db
     session.add(db_article)
     session.commit()
     session.refresh(db_article)
@@ -160,18 +163,27 @@ def update_article(article_id: int, article: ArticleUpdate):
         return article_db
     
     
-@app.post("/login", response_model=User)
-def login(username: str, password: str):
+@app.post("/login")
+# OAuth2PasswordBearer will instansiate an authentication object
+# That contains form data with the following fields:
+# - username
+# - password
+def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     with Session(myblog_db) as session:
         # SELECT * FROM User WHERE `username` = <username>
         select_statement = select(User).where(
-            User.username == username,
-            User.password == password
+            User.username == form_data.username,
+            User.password == form_data.password
             )
         users = session.exec(select_statement).all()
         if len(users) == 0:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-        return users[0]
+        id = users[0].id
+        print(id)
+        return {
+            "access_token": id,
+            "token_type": "bearer"
+        }
         
     
 @app.get("/users/{user_id}", response_model=User)
@@ -181,4 +193,9 @@ def get_user(user_id: int):
         if not user:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Inccorect user.")
         return user
-    
+
+
+@app.get("/me")
+def get_myself(id: Annotated[str, Depends(oauth2_scheme)]):
+    print(id)
+    return get_user(int(id))
