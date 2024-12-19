@@ -1,10 +1,12 @@
+from enum import Enum
 import os
+from re import S
 from urllib.parse import quote_plus
 from datetime import datetime, timezone
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, status
 # from pydantic import BaseModel
 from sqlmodel import Field, SQLModel, create_engine, Session, select
 
@@ -16,8 +18,24 @@ MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
 MYSQL_DATABASE = os.getenv("MYSQL_DATABASE")
 MYSQL_PORT = os.getenv("MYSQL_PORT")
 
+# SECRET_TOKEN = os.getenv("SECRET_TOKEN")
+
 CONNECTION_STRING = f"mysql+mysqlconnector://{MYSQL_USER}:{quote_plus(MYSQL_PASSWORD)}@localhost:{MYSQL_PORT}/{MYSQL_DATABASE}"
 myblog_db = create_engine(CONNECTION_STRING)
+
+
+class RoleEnum(Enum):
+    ADMIN = 'admin'
+    USER = 'user'
+
+
+@dataclass
+class User(SQLModel, table=True):
+    __tablename__ = "users"
+    id: int | None = Field(default=None, primary_key=True)
+    username: str
+    password: str
+    role: str | None = Field(default=RoleEnum.USER.value)
 
 
 @dataclass
@@ -58,13 +76,19 @@ Args:
 Returns:
 - Article: The created article
           """)
-def create_article(article: ArticleUpdate):
+def create_article(article: ArticleUpdate, user_id: int, token: str=""):
     # Create a session with the database
     # Add the article to the session: article in memory but not in the DB
     # Commit the session: The article is in the DB
     # Refresh session
+    # if token != SECRET_TOKEN:
+    #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, 
+    #                         detail="Bad credentials")
     session = Session(myblog_db)
-    db_article = Article.model_validate(article)
+    # article.author = get_user(user_id).username
+    data_article = article.model_dump(exclude_unset=True)
+    data_article["author"] = get_user(user_id).username
+    db_article = Article(**data_article)
     session.add(db_article)
     session.commit()
     session.refresh(db_article)
@@ -131,4 +155,27 @@ def update_article(article_id: int, article: ArticleUpdate):
         
         # Return it.
         return article_db
+    
+    
+@app.post("/login", response_model=User)
+def login(username: str, password: str):
+    with Session(myblog_db) as session:
+        # SELECT * FROM User WHERE `username` = <username>
+        select_statement = select(User).where(
+            User.username == username,
+            User.password == password
+            )
+        users = session.exec(select_statement).all()
+        if len(users) == 0:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+        return users[0]
+        
+    
+@app.get("/users/{user_id}", response_model=User)
+def get_user(user_id: int):
+    with Session(myblog_db) as session:
+        user = session.get(User, user_id)
+        if not user:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Inccorect user.")
+        return user
     
