@@ -16,12 +16,13 @@ app = FastAPI()
 MYSQL_USER = os.getenv("MYSQL_USER")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
 MYSQL_DATABASE = os.getenv("MYSQL_DATABASE")
-CONNECTION_STRING = f"mysql+mysqlconnector://{MYSQL_USER}:{quote_plus(MYSQL_PASSWORD)}@localhost/{MYSQL_DATABASE}"
+# MYSQL_PORT = os.getenv("MYSQL_PORT") # In case there is a conflict with another MYSQL instance
+CONNECTION_STRING = f"mysql+mysqlconnector://{MYSQL_USER}:{quote_plus(MYSQL_PASSWORD)}@localhost/{MYSQL_DATABASE}" # Build f-String
 myblog_db = create_engine(CONNECTION_STRING)
 
 
 # Article class
-@dataclass
+@dataclass # Decorator to tie the class to the database
 class Article(SQLModel, table =True):
     __tablename__="articles"
     id: int | None = Field(default=None, primary_key=True)
@@ -30,7 +31,7 @@ class Article(SQLModel, table =True):
     body: str | None = Field(default=None)
     created_at: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-class ArticleUpdate(SQLModel):
+class ArticleUpdate(SQLModel): # Data Model for FastAPI
     author: str | None
     title: str | None
     body: str | None
@@ -45,7 +46,7 @@ class Comment(SQLModel, table= True):
     body: str | None = Field(default=None)
     created_at: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-class CommentUpdate(SQLModel):
+class CommentUpdate(SQLModel): # Data Model for FastAPI
     author: str | None
     title: str | None
     body: str | None
@@ -59,18 +60,20 @@ def root():
     
 # Article APIs    
 @app.post("/articles/")
-def create_article(article: Article):
+def create_article(article: ArticleUpdate): # Use class `ArticleUpdate` to limit request to the required parameters
     # Create a session to the DB
     session = Session(myblog_db)
+    # Complete the article object by validating/mapping the input to the model tied to the DB
+    db_article = Article.model_validate(article)
     # then add the article
-    session.add(article)
+    session.add(db_article)
     # Commit the session
     session.commit()
     # Refresh Session
-    session.refresh(article)
-
-    print("New article: ", article.id)
-    return article
+    session.refresh(db_article)
+    # Return restuls
+    print("New article: ", db_article.id)
+    return db_article
 
 @app.get("/articles", response_model=list[Article])
 def list_articles():
@@ -128,17 +131,19 @@ def update_article(article_id: int, article: ArticleUpdate):
 
 # Comments APIs
 @app.post("/comments/")
-def create_comment(article_id: int, comment: Comment):
+def create_comment(article_id: int, comment: CommentUpdate):
     session = Session(myblog_db)
     # Check if article exist
     if not session.get(Article, article_id):
         raise HTTPException(status_code=404, detail="Comment not possible. Article not found")
-    comment.article_id = article_id
-    session.add(comment)
+    # Complete the article object by validating/mapping the input to the model tied to the DB
+    db_comment = Comment.model_validate(comment)
+    db_comment.article_id = article_id
+    session.add(db_comment)
     session.commit()
-    session.refresh(comment)
-    print("New comment: ", comment.id)
-    return comment
+    session.refresh(db_comment)
+    print("New comment: ", db_comment.id)
+    return db_comment
 
 
 @app.get("/comments", response_model=list[Comment])
