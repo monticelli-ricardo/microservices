@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
 # from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlmodel import Field, SQLModel, create_engine, Session, select
+from sqlmodel import Field, SQLModel, create_engine, Session, or_, select
 
 load_dotenv()
 
@@ -102,10 +102,14 @@ def create_article(article: ArticleUpdate, user_id: int, token: str=""):
     return db_article
 
 @app.get("/articles", response_model=list[Article])
-def list_articles():
+def list_articles(token: Annotated[str, Depends(oauth2_scheme)]):
+    user = get_user(int(token))
     with Session(myblog_db) as session:
         # select * from articles ==> Class Article
-        statement = select(Article)
+        statement = select(Article).where(or_(
+            (Article.author == user.username),
+            (user.role == RoleEnum.ADMIN.value)
+        ))
         print(statement)
         articles = session.exec(statement).all()
         return articles
@@ -113,11 +117,15 @@ def list_articles():
 
 @app.get("/articles/{article_id}",
          response_model=Article)
-def get_article(article_id: int):
+def get_article(article_id: int, token: Annotated[str, Depends(oauth2_scheme)]):
+    user = get_user(int(token))
     with Session(myblog_db) as session:
         article = session.get(Article, article_id)
         if not article:
             raise HTTPException(status_code=404, detail="Article not found")
+        if article.author != user.username and user.role != RoleEnum.ADMIN.value:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Access Forbidden")
         return article
     
 @app.delete("/articles/{article_id}")
@@ -178,10 +186,10 @@ def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
         users = session.exec(select_statement).all()
         if len(users) == 0:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-        id = users[0].id
-        print(id)
+        token = users[0].id
+        print(token)
         return {
-            "access_token": id,
+            "access_token": token,
             "token_type": "bearer"
         }
         
@@ -196,6 +204,6 @@ def get_user(user_id: int):
 
 
 @app.get("/me")
-def get_myself(id: Annotated[str, Depends(oauth2_scheme)]):
+def get_myself(token: Annotated[str, Depends(oauth2_scheme)]):
     print(id)
-    return get_user(int(id))
+    return get_user(int(token))
