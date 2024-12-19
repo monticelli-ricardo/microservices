@@ -85,10 +85,13 @@ def create_article(article: ArticleUpdate, user_id: int, token: str=""):
     #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, 
     #                         detail="Bad credentials")
     session = Session(myblog_db)
-    # article.author = get_user(user_id).username
+    # Generate a dict from the input article
     data_article = article.model_dump(exclude_unset=True)
-    data_article["author"] = get_user(user_id).username
-    db_article = Article(**data_article)
+    # Create a complete article to add to the db
+    db_article = Article(
+        author=get_user(user_id).username,
+        **data_article
+    )   
     session.add(db_article)
     session.commit()
     session.refresh(db_article)
